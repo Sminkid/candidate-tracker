@@ -25,6 +25,12 @@ const validBody = {
   resumeText: "Invented the first compiler. Rear admiral, US Navy.",
 };
 
+// A valid email address exactly `length` characters long.
+function emailOfLength(length: number) {
+  const domain = "@example.com";
+  return "a".repeat(length - domain.length) + domain;
+}
+
 // Every error response must use the one shape from CLAUDE.md.
 function expectErrorShape(body: unknown) {
   expect(body).toEqual({ error: { message: expect.any(String) } });
@@ -63,10 +69,47 @@ describe("POST /api/candidates", () => {
     expect(res.body.archivedAt).toBeNull();
   });
 
+  it("stores phone numbers as typed (only trimmed), keeping their formatting", async () => {
+    const res = await request(app)
+      .post("/api/candidates")
+      .send({ ...validBody, phone: "  +353 (0)87 123 4567  " });
+
+    expect(res.status).toBe(201);
+    expect(res.body.phone).toBe("+353 (0)87 123 4567");
+  });
+
+  it("allows a phone number with 15 digits, however it is formatted", async () => {
+    const phone = "+1 (234) 567-8901-2345"; // 22 characters, 15 digits
+    const res = await request(app).post("/api/candidates").send({ ...validBody, phone });
+
+    expect(res.status).toBe(201);
+    expect(res.body.phone).toBe(phone);
+  });
+
+  it("explains a phone number with too many digits", async () => {
+    const res = await request(app)
+      .post("/api/candidates")
+      .send({ ...validBody, phone: "+1 (234) 567-8901-23456" }); // 16 digits
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toBe("phone: must have at most 15 digits");
+  });
+
+  it("allows a 100-character email", async () => {
+    const email = emailOfLength(100);
+    const res = await request(app).post("/api/candidates").send({ ...validBody, email });
+
+    expect(res.status).toBe(201);
+    expect(res.body.email).toBe(email);
+  });
+
   const invalidBodies: Array<[string, Record<string, unknown>, string]> = [
     ["name is missing", { ...validBody, name: undefined }, "name"],
     ["name is blank", { ...validBody, name: "   " }, "name"],
     ["email is not an email", { ...validBody, email: "banana" }, "email"],
+    ["email is too long", { ...validBody, email: emailOfLength(101) }, "email"],
+    // 15 digits but 31 characters: the overall cap stops pasted paragraphs.
+    ["phone is too long overall", { ...validBody, phone: "1-2-3-4-5-6-7-8-9-0-1-2-3-4-5--" }, "phone"],
     ["role is missing", { ...validBody, role: undefined }, "role"],
     ["resumeText is not text", { ...validBody, resumeText: 42 }, "resumeText"],
     ["name is too long", { ...validBody, name: "x".repeat(201) }, "name"],

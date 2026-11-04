@@ -27,9 +27,9 @@ reasoning, tests and how AI tools are used. The author must be able to explain a
 | 2 | Setup (Neon, Gemini key, repo skeleton, CLAUDE.md, README draft) | Done |
 | 3 | Server scaffold and database | Done (committed) |
 | 4 | Candidate service, notes and routes (test-first) | Done (committed) |
-| 5 | AI summarizer module (test-first) + summary endpoint | Done — 156 tests passing; **awaiting author review, `npm run db:migrate` (0002) and commit** |
-| 6 | React client: add form, list with filters/sort, detail page with notes, stage change, summary | **Next** |
-| 7 | Integration and seed data, incl. garbled and adversarial resumes | To do |
+| 5 | AI summarizer module (test-first) + summary endpoint | Done (committed) |
+| 6 | React client: add form, list with filters/sort, detail page with notes, stage change, summary | Done: list, add form, detail; 76 client tests; **awaiting author review/commit** |
+| 7 | Integration and seed data, incl. garbled and adversarial resumes | **Next** |
 | 8 | Docs: README run steps + tests command, one-page write-up, AI usage log, learning log, screenshots/demo | To do |
 | 9 | Deploy to Vercel (two projects, one repo), or one-page cloud design if short on time | To do |
 
@@ -40,8 +40,17 @@ Protect tasks 3–5 above all. If time runs short, cut from the end.
 - A failed regenerate **keeps the previous summary** and sets `summaryStatus`/`summaryReason` (Claude had recommended clearing it). The UI must handle "summary present + status error".
 - Missing `GEMINI_API_KEY` does not stop the server: it warns, and every summary attempt is stored as `error`.
 
+### Task 6 decisions (author)
+- Summaries are **manual only**: a never-summarised candidate (`summaryStatus` null) shows "No summary yet" + a Generate button. No auto-call after save.
+- Client gets **logic + component tests** (Vitest + React Testing Library, jsdom, fetch faked).
+- Unsummarisable state: **show the stored reason + a "Try again" button** (Claude had recommended no retry, since preflight on the same text fails the same way).
+- Summary card states (from `summaryView`): none ("No summary yet" + Generate), ok, unsummarizable, error, and error/unsummarizable **with the previous summary shown below the notice**. Error copy uses the stored reason and says the rest of the profile still works. No "generated at" line (no timestamp stored).
+- Detail: archive asks for confirmation inline (there is no un-archive), then returns to the list; archived candidates show "Archived on …" and no Archive button. Stage select only changes after the server succeeds. Notes newest first; blank notes blocked; draft kept on failure.
+- Claude's choices (author may revisit): role filter options come from the data (an extra unfiltered list request), not a hardcoded list; list filters live in the URL query string; plain CSS with design tokens as CSS variables; client writes its own API types (dates are strings) instead of importing from server/.
+- Add form: no client copy of the server's Zod rules. Native `required`/`type=email`/`maxLength` catch obvious mistakes; the server's 400 message is split per field (`splitServerErrors`). Source options = design list + "Careers page" (used in the fixture). After save it opens `/candidates/:id`.
+
 ## Stack
-- Frontend: React + Vite + TypeScript (`client/`) — not created yet
+- Frontend: React 19 + Vite 8 + TypeScript 7 (`client/`), react-router 8 (declarative `<Routes>`), plain CSS. Dev: Vite proxies `/api` to `localhost:3000`; `VITE_API_URL` sets another API origin (task 9)
 - Backend: Node + Express 5 + TypeScript 7 (`server/`), run with `tsx` (no build step)
 - Database: Postgres (Neon) via Drizzle ORM 0.45, Neon HTTP driver (`@neondatabase/serverless`)
 - Validation: Zod 4, for API input and for AI output
@@ -52,7 +61,16 @@ Protect tasks 3–5 above all. If time runs short, cut from the end.
 
 ## Layout
 ```
-client/                       React app (task 6)
+client/
+  src/
+    App.tsx                   AppRoutes (BrowserRouter in main.tsx, MemoryRouter in tests)
+    api/                      types.ts (JSON shapes), http.ts (apiRequest, ApiError), candidates.ts (one function per endpoint)
+    lib/                      useApiData (load + cancel stale requests), listFilters (URL <-> filters), stages, format
+    lib/summaryView.ts        which summary card state to show + button label
+    lib/formErrors.ts         splits the server's "field: problem; ..." message into per-field errors
+    components/, pages/       Layout, StagePill, BackLink, SummaryCard, NotesPanel; CandidateListPage, AddCandidatePage, CandidateDetailPage, NotFoundPage
+    index.css                 design tokens (CSS variables) + classes
+  tests/                      helpers/ (mockFetch, makeCandidate, renderApp + LocationProbe), lib/, api/, pages/
 server/
   drizzle.config.ts           drizzle-kit config; loads .env itself
   src/
@@ -92,10 +110,10 @@ Deliberate exception: `tests/helpers/testDb.ts` imports Drizzle/PGlite (test set
 - `notes`: id (uuid), candidateId (FK → candidates, indexed), body, createdAt. Append-only: no update or delete anywhere.
 - Required text columns (name, email, role, resume_text, notes.body) are NOT NULL **and** have CHECK constraints rejecting blank/whitespace-only text (`~ '[^[:space:]]'`).
 - phone and source are optional by design (unknown is stored as NULL, never as a placeholder).
+- Phone numbers are stored as typed (trimmed), formatting kept. The limit is **15 digits** (the E.164 maximum), counted ignoring spaces, brackets, `+` and dashes, plus a 30-character overall cap.
 - Archive is a soft delete (`archivedAt`). Lists exclude archived candidates by default. Archiving is idempotent (keeps the first date).
 - Stage moves are free transitions (no workflow rules). Postgres sorts the stage enum in pipeline order.
 - Schema change flow: edit `schema.ts` → `npm run db:generate` → review SQL → `npm run db:migrate` → commit the migration.
-
 ## API (REST, JSON)
 | Method & path | Success | Notes |
 |---|---|---|
@@ -108,7 +126,7 @@ Deliberate exception: `tests/helpers/testDb.ts` imports Drizzle/PGlite (test set
 | `POST /api/candidates/:id/summary` | 200 candidate | generate or regenerate, then store. AI failure is still 200: see `summaryStatus` + `summaryReason` |
 - Validate every body, query and `:id` with Zod in the route (`validate()` in `routes/http.ts`). Errors use one shape: `{ "error": { "message": "..." } }`. Messages list every problem, e.g. `name: is required; email: must be a valid email address`.
 - Status codes: 400 invalid input / malformed JSON / non-UUID id; 404 unknown candidate or route; 500 generic `"Internal server error"`.
-- Input cleaning (Zod): text is trimmed; email trimmed + lowercased; blank/null optional fields become NULL. Limits: name/role 200, email 254, phone 50, source 100, resumeText 100,000, note 5,000 chars; JSON body 1 MB.
+- Input cleaning (Zod): text is trimmed; email trimmed + lowercased; blank/null optional fields become NULL. Limits: name/role 200, email 100, phone 15 digits / 30 chars, source 100, resumeText 100,000, note 5,000 chars; JSON body 1 MB.
 - Decisions made in task 4 (author may revisit): archived candidates can still be viewed, moved and noted; malformed id → 400 (not 404); emails lowercased.
 
 ## AI module rules (`server/src/ai/summarizer/`)
@@ -132,6 +150,7 @@ Deliberate exception: `tests/helpers/testDb.ts` imports Drizzle/PGlite (test set
   Tests in a file share that database, so never use `it.concurrent` there.
 - Test data: use `seedCandidates(db)` (realistic fixture) for rules across many records and assert **properties** ("every result has stage X", "each pair is in order"), not hardcoded counts. Use factories (`insertCandidate(db, { ...overrides })`) for exact, controlled cases. Fixture guard tests keep the fixture covering every stage, archived + active, repeated roles, distinct createdAt.
 - Assert exact reasons, not just "it threw": Postgres codes `23502` NOT NULL, `23503` FK, `23514` CHECK; `NotFoundError` for missing rows.
+- Client commands (from `client/`): `npm run dev`, `npm test`, `npm run typecheck`, `npm run build`, `npm run lint`. Run the server too for real data.
 - Commands (from `server/`): `npm test`, `npm run test:watch`, `npm run typecheck`, `npm run dev`, `npm run db:generate`, `npm run db:migrate`.
 
 ## Conventions
@@ -147,6 +166,8 @@ Deliberate exception: `tests/helpers/testDb.ts` imports Drizzle/PGlite (test set
 - Through the generic `Database` type, `db.execute()` results are `unknown`; test helpers use the PGlite-specific `TestDb` type instead.
 - V8's `JSON.parse` error message quotes part of the input, and SDK errors can echo the request: the summarizer logs only fixed text, error name/HTTP status and Zod issue paths/codes.
 - `@google/genai` `Schema` takes `maxItems` as a **string**. Its `responseSchema` is a request, not a guarantee; Zod is the gate. A test keeps its field names in step with the Zod schema.
+- create-vite's `tsconfig.app.json` had no `"strict": true`; added explicitly to both client tsconfigs.
+- `useApiData` must not set "loading" inside an effect (oxlint `set-state-in-effect`): results are stored with their request key and "loading" is derived. The `aborted` guard is still needed, or a late stale answer overwrites the current one (the race test proves it).
 - `npm audit` reports moderate issues from an old esbuild inside drizzle-kit (dev only, not exploitable here); the suggested `--force` fix downgrades drizzle-kit — do not run it.
 
 ## AI usage log (running list; genuine moments only)
@@ -160,3 +181,14 @@ Deliberate exception: `tests/helpers/testDb.ts` imports Drizzle/PGlite (test set
 8. Claude's first safe error log was too vague (`Error: PGlite is closed`); added the SQL text with placeholders so failures are traceable without leaking resume text.
 9. Author overruled Claude's recommendation to clear the old summary when a regenerate fails: the previous summary is kept, with status/reason marking the failure.
 10. Claude caught its own prompt-injection hole: a single-pass tag strip turns `<res<resume>ume>` into `<resume>`. Wrote the failing test first, then fixed it by repeating the strip until nothing changes.
+11. Author chose manual-only summaries over Claude's recommendation to auto-generate after save.
+12. Author chose logic + component tests for the client, more than Claude's recommended pure-logic-only tests.
+13. The linter caught Claude's `useApiData` setting state synchronously in an effect; rewrote it to derive "loading" from the request key.
+14. Claude's first add-form tests found fields with `getByLabelText`, which matched the label's full text including the visually shown "Required" tag. Switched to accessible names (`getByRole(..., { name })`), which also verifies the tag is hidden from screen readers.
+15. A break-test showed Claude's double-submit guard (`if (saving) return`) was dead code: the disabled button already prevents it. Removed instead of kept untested.
+16. Author chose "show reason + Try again" for unsummarisable resumes over Claude's recommendation of no retry button.
+17. Adding the detail page made Claude's add-form tests throw unhandled errors: their fake API answered the detail page's GET without `notes`. Fixed the fake to match the real API shape.
+18. Author tightened limits (phone 50 → 15, email 254 → 100). Claude flagged that 15 characters would reject two of the realistic fixture numbers (spaces count); the author chose to strip spaces before validating and to clean existing rows with a data migration.
+19. Claude's first "break it on purpose" script for the phone rule silently did nothing (its regex did not match, so the code was unchanged and the tests still passed). Spotted from the printed code and redone by hand: putting `.max()` before `.overwrite()` fails 2 tests.
+20. Author asked Claude to review decision 18. Claude pointed out the "15" came from E.164, which counts digits, while the rule counted `+()-` too, and that stripping spaces hurt readability. Author switched to "store as typed, at most 15 digits, 30 characters overall", which removed the data migration.
+21. Break-tests are now checked to have applied before reading the result: two of Claude's `sed` sabotages either did not match or hit every `.trim()` in the file; both redone by hand.

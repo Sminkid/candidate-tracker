@@ -1,5 +1,7 @@
 import { Route, Routes } from "react-router";
 import { Layout } from "./components/Layout";
+import { AddCandidatePage } from "./pages/AddCandidatePage";
+import { CandidateDetailPage } from "./pages/CandidateDetailPage";
 import { CandidateListPage } from "./pages/CandidateListPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 
@@ -10,7 +12,8 @@ export function AppRoutes() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<CandidateListPage />} />
-        {/* Next screens: /candidates/new (add form), /candidates/:id (detail). */}
+        <Route path="candidates/new" element={<AddCandidatePage />} />
+        <Route path="candidates/:id" element={<CandidateDetailPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

@@ -22,6 +22,23 @@ const optionalText = (maxLength: number) =>
     .nullish()
     .transform((value) => (value ? value : undefined));
 
+// Optional phone: stored as typed (trimmed), so "+353 (0)87 123 4567" stays readable.
+// The real limit counts digits only: 15 is the international maximum (E.164),
+// whatever spaces, brackets or dashes surround them. The character cap only
+// stops someone pasting a paragraph into the field.
+const MAX_PHONE_DIGITS = 15;
+const MAX_PHONE_CHARS = 30;
+const optionalPhone = z
+  .string({ error: "must be text" })
+  .trim()
+  .max(MAX_PHONE_CHARS, `must be at most ${MAX_PHONE_CHARS} characters`)
+  .refine(
+    (value) => value.replace(/\D/g, "").length <= MAX_PHONE_DIGITS,
+    `must have at most ${MAX_PHONE_DIGITS} digits`,
+  )
+  .nullish()
+  .transform((value) => (value ? value : undefined));
+
 export const candidateIdParams = z.object({
   id: z.uuid("must be a valid candidate id"),
 });
@@ -32,8 +49,8 @@ export const createCandidateBody = z.object({
     .string({ error: (issue) => (issue.input === undefined ? "is required" : "must be text") })
     .trim()
     .toLowerCase()
-    .pipe(z.email("must be a valid email address").max(254)),
-  phone: optionalText(50),
+    .pipe(z.email("must be a valid email address").max(100, "must be at most 100 characters")),
+  phone: optionalPhone,
   role: requiredText(200),
   resumeText: requiredText(100_000),
   source: optionalText(100),

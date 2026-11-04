@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorMessage } from "../api/http";
+import { ApiError, errorMessage } from "../api/http";
 
 export type LoadState<T> =
   | { status: "loading" }
-  | { status: "error"; message: string }
+  // httpStatus lets a page tell "not found" (404) apart from other failures; 0 = no response.
+  | { status: "error"; message: string; httpStatus: number }
   | { status: "ready"; data: T };
 
 type Settled<T> = Exclude<LoadState<T>, { status: "loading" }>;
@@ -36,7 +37,8 @@ export function useApiData<T>(load: (signal: AbortSignal) => Promise<T>, key: st
       },
       (err: unknown) => {
         if (!controller.signal.aborted) {
-          setResult({ requestKey, state: { status: "error", message: errorMessage(err) } });
+          const httpStatus = err instanceof ApiError ? err.status : 0;
+          setResult({ requestKey, state: { status: "error", message: errorMessage(err), httpStatus } });
         }
       },
     );
@@ -49,5 +51,16 @@ export function useApiData<T>(load: (signal: AbortSignal) => Promise<T>, key: st
     result && result.requestKey === requestKey ? result.state : { status: "loading" };
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
-  return { state, reload };
+
+  // Replace the loaded data after a successful change (e.g. a new stage from the
+  // server), without fetching everything again. Does nothing until data has loaded.
+  const setData = useCallback((update: (data: T) => T) => {
+    setResult((current) =>
+      current && current.state.status === "ready"
+        ? { ...current, state: { status: "ready", data: update(current.state.data) } }
+        : current,
+    );
+  }, []);
+
+  return { state, reload, setData };
 }
