@@ -44,6 +44,9 @@ export const candidates = pgTable(
     stage: stageEnum("stage").notNull().default("applied"),
     summary: jsonb("summary").$type<StoredSummary>(),
     summaryStatus: summaryStatusEnum("summary_status"),
+    // Why the last summary attempt failed, as a short fixed message we wrote
+    // (never model output or resume text). NULL when the last attempt succeeded.
+    summaryReason: text("summary_reason"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

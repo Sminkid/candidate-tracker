@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Summarizer } from "../ai/summarizer";
 import type { Database } from "../db";
 import * as candidateService from "../services/candidateService";
 import {
@@ -13,7 +14,12 @@ import { validate } from "./http";
 // HTTP only: validate the request with Zod, call one service function, send JSON.
 // Any thrown error (bad input, not found, unexpected) goes to the error handler in http.ts.
 
-export function createCandidatesRouter(db: Database): Router {
+export type CandidatesRouterDependencies = {
+  db: Database;
+  summarizer: Summarizer;
+};
+
+export function createCandidatesRouter({ db, summarizer }: CandidatesRouterDependencies): Router {
   const router = Router();
 
   router.post("/", async (req, res) => {
@@ -48,6 +54,13 @@ export function createCandidatesRouter(db: Database): Router {
     const { id } = validate(candidateIdParams, req.params);
     const { body } = validate(addNoteBody, req.body);
     res.status(201).json(await candidateService.addNote(db, id, body));
+  });
+
+  // Always 200 when the candidate exists: an AI failure is reported in the
+  // returned candidate (summaryStatus + summaryReason), not as an HTTP error.
+  router.post("/:id/summary", async (req, res) => {
+    const { id } = validate(candidateIdParams, req.params);
+    res.json(await candidateService.generateSummary(db, id, { summarizer }));
   });
 
   return router;

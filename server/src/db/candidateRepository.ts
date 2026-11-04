@@ -78,3 +78,16 @@ export async function findNotesForCandidate(db: Database, candidateId: string): 
     .where(eq(notes.candidateId, candidateId))
     .orderBy(asc(notes.createdAt), asc(notes.id));
 }
+
+export type SummaryUpdate = Partial<Pick<NewCandidate, "summary" | "summaryStatus" | "summaryReason">>;
+
+// Writes only the summary fields given. A field left out (undefined) is not
+// touched, which is how a failed regenerate keeps the previous summary.
+export async function updateCandidateSummary(
+  db: Database,
+  id: string,
+  values: SummaryUpdate,
+): Promise<Candidate | undefined> {
+  const [row] = await db.update(candidates).set(values).where(eq(candidates.id, id)).returning();
+  return row;
+}

@@ -5,10 +5,18 @@ import { createApp } from "../../src/app";
 import { createTestDb, resetTestDb } from "../helpers/testDb";
 import { candidateData, insertCandidate, insertNote } from "../helpers/factories";
 import { seedCandidates } from "../fixtures/candidates";
+import { unusedSummarizer } from "../helpers/fakes";
+import type { Summarizer } from "../../src/ai/summarizer";
 
 const db = await createTestDb();
-const app = createApp({ db });
-beforeEach(() => resetTestDb(db));
+// Tests that need a summary set its answer with mockResolvedValueOnce;
+// otherwise asking for one fails the test.
+const summarizer = vi.fn<Summarizer>();
+const app = createApp({ db, summarizer });
+beforeEach(async () => {
+  summarizer.mockReset().mockImplementation(unusedSummarizer);
+  await resetTestDb(db);
+});
 
 const validBody = {
   name: "Grace Hopper",
@@ -244,6 +252,58 @@ describe("POST /api/candidates/:id/notes", () => {
   });
 });
 
+describe("POST /api/candidates/:id/summary", () => {
+  it("generates, stores and returns the summary", async () => {
+    const candidate = await insertCandidate(db, { resumeText: "Built compilers for 30 years." });
+    summarizer.mockResolvedValueOnce({ status: "ok", skills: ["Compilers"], highlights: ["Wrote A-0."] });
+
+    const res = await request(app).post(`/api/candidates/${candidate.id}/summary`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      id: candidate.id,
+      summary: { skills: ["Compilers"], highlights: ["Wrote A-0."] },
+      summaryStatus: "ok",
+      summaryReason: null,
+    });
+    expect(summarizer).toHaveBeenCalledWith("Built compilers for 30 years.");
+
+    const reloaded = await request(app).get(`/api/candidates/${candidate.id}`);
+    expect(reloaded.body.summary).toEqual(res.body.summary);
+  });
+
+  it("responds normally when the AI fails, and the app keeps working", async () => {
+    const candidate = await insertCandidate(db);
+    summarizer.mockResolvedValueOnce({ status: "error", reason: "The AI service timed out" });
+
+    const res = await request(app).post(`/api/candidates/${candidate.id}/summary`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      summary: null,
+      summaryStatus: "error",
+      summaryReason: "The AI service timed out",
+    });
+    const list = await request(app).get("/api/candidates");
+    expect(list.status).toBe(200);
+  });
+
+  it("returns 404 for an unknown candidate", async () => {
+    const res = await request(app).post(`/api/candidates/${randomUUID()}/summary`);
+
+    expect(res.status).toBe(404);
+    expectErrorShape(res.body);
+    expect(summarizer).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for an id that is not a UUID", async () => {
+    const res = await request(app).post("/api/candidates/not-a-uuid/summary");
+
+    expect(res.status).toBe(400);
+    expectErrorShape(res.body);
+  });
+});
+
 describe("routes that must not exist", () => {
   it.each(["put", "patch", "delete"] as const)(
     "notes are append-only: %s on a note returns 404",
@@ -276,7 +336,7 @@ describe("unexpected errors", () => {
     // and Drizzle puts the query parameters (including the resume) in its error message.
     const brokenDb = await createTestDb();
     await (brokenDb as unknown as { $client: { close(): Promise<void> } }).$client.close();
-    const brokenApp = createApp({ db: brokenDb });
+    const brokenApp = createApp({ db: brokenDb, summarizer: unusedSummarizer });
     const secretResume = "SECRET-RESUME-TEXT confidential career history";
 
     const res = await request(brokenApp)

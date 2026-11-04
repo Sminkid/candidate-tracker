@@ -1,3 +1,4 @@
+import type { Summarizer } from "../ai/summarizer";
 import type { Database } from "../db";
 import * as repo from "../db/candidateRepository";
 import type { Candidate, NewCandidate, Note, Stage } from "../db/schema";
@@ -68,6 +69,36 @@ export async function addNote(db: Database, candidateId: string, body: string): 
   // Check first so callers get a clear NotFoundError, not a raw foreign-key error.
   await requireCandidate(db, candidateId);
   return repo.insertNote(db, candidateId, body);
+}
+
+export type SummaryDependencies = { summarizer: Summarizer };
+
+// Generates (or regenerates) a candidate's AI summary and stores the outcome.
+// The summarizer never throws, so an AI failure is stored as a status and
+// reason, not raised as an HTTP error.
+// On failure the previous summary is kept (the author's choice): the UI can
+// still show it, marked with the failed status and reason.
+export async function generateSummary(
+  db: Database,
+  id: string,
+  { summarizer }: SummaryDependencies,
+): Promise<Candidate> {
+  const candidate = await requireCandidate(db, id);
+  const result = await summarizer(candidate.resumeText);
+
+  const update: repo.SummaryUpdate =
+    result.status === "ok"
+      ? {
+          summary: { skills: result.skills, highlights: result.highlights },
+          summaryStatus: "ok",
+          summaryReason: null,
+        }
+      : // summary is left out on purpose, so the stored one is not touched.
+        { summaryStatus: result.status, summaryReason: result.reason };
+
+  const updated = await repo.updateCandidateSummary(db, id, update);
+  if (!updated) throw candidateNotFound(id);
+  return updated;
 }
 
 async function requireCandidate(db: Database, id: string): Promise<Candidate> {

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createTestDb, resetTestDb } from "../helpers/testDb";
 import { candidateData, insertCandidate } from "../helpers/factories";
 import { fixtureCandidates, seedCandidates } from "../fixtures/candidates";
@@ -8,11 +8,13 @@ import {
   addNote,
   archiveCandidate,
   createCandidate,
+  generateSummary,
   getCandidate,
   listCandidates,
   moveStage,
 } from "../../src/services/candidateService";
 import { NotFoundError } from "../../src/services/errors";
+import type { Summarizer, SummaryResult } from "../../src/ai/summarizer";
 
 const db = await createTestDb();
 beforeEach(() => resetTestDb(db));
@@ -251,3 +253,95 @@ function expectEachPair(list: Candidate[], rule: (a: Candidate, b: Candidate) =>
     expect(rule(list[i], list[i + 1]), `items ${i} and ${i + 1} out of order`).toBe(true);
   }
 }
+
+describe("generateSummary", () => {
+  // A fake summarizer that always gives the same result. Real AI is never called.
+  const summarizerReturning = (result: SummaryResult) => vi.fn<Summarizer>(async () => result);
+
+  const okResult: SummaryResult = {
+    status: "ok",
+    skills: ["COBOL", "Compilers"],
+    highlights: ["Invented the first compiler."],
+  };
+  const existingSummary = { skills: ["Go"], highlights: ["Earlier summary."] };
+
+  it("summarizes the candidate's resume and stores the result", async () => {
+    const candidate = await insertCandidate(db, { resumeText: "Invented the first compiler." });
+    const summarizer = summarizerReturning(okResult);
+
+    const updated = await generateSummary(db, candidate.id, { summarizer });
+
+    expect(summarizer).toHaveBeenCalledWith("Invented the first compiler.");
+    expect(updated).toMatchObject({
+      id: candidate.id,
+      summary: { skills: ["COBOL", "Compilers"], highlights: ["Invented the first compiler."] },
+      summaryStatus: "ok",
+      summaryReason: null,
+    });
+    expect(await getCandidate(db, candidate.id)).toMatchObject({
+      summary: updated.summary,
+      summaryStatus: "ok",
+    });
+  });
+
+  it.each<SummaryResult>([
+    { status: "unsummarizable", reason: "Resume text is too short to summarize" },
+    { status: "error", reason: "The AI service timed out" },
+  ])("stores status $status and the reason when there is no summary yet", async (result) => {
+    const candidate = await insertCandidate(db);
+
+    const updated = await generateSummary(db, candidate.id, { summarizer: summarizerReturning(result) });
+
+    expect(updated).toMatchObject({
+      summary: null,
+      summaryStatus: result.status,
+      summaryReason: "reason" in result ? result.reason : null,
+    });
+  });
+
+  it("keeps the previous summary when regenerating fails", async () => {
+    const candidate = await insertCandidate(db, { summary: existingSummary, summaryStatus: "ok" });
+
+    const updated = await generateSummary(db, candidate.id, {
+      summarizer: summarizerReturning({ status: "error", reason: "The AI service failed" }),
+    });
+
+    expect(updated).toMatchObject({
+      summary: existingSummary,
+      summaryStatus: "error",
+      summaryReason: "The AI service failed",
+    });
+  });
+
+  it("replaces the summary and clears the old reason when regenerating succeeds", async () => {
+    const candidate = await insertCandidate(db, {
+      summary: existingSummary,
+      summaryStatus: "error",
+      summaryReason: "The AI service failed",
+    });
+
+    const updated = await generateSummary(db, candidate.id, { summarizer: summarizerReturning(okResult) });
+
+    expect(updated).toMatchObject({
+      summary: { skills: okResult.skills, highlights: okResult.highlights },
+      summaryStatus: "ok",
+      summaryReason: null,
+    });
+  });
+
+  it("only changes the requested candidate", async () => {
+    const target = await insertCandidate(db, { email: "target@example.com" });
+    const other = await insertCandidate(db, { email: "other@example.com" });
+
+    await generateSummary(db, target.id, { summarizer: summarizerReturning(okResult) });
+
+    expect(await getCandidate(db, other.id)).toMatchObject({ summary: null, summaryStatus: null });
+  });
+
+  it("throws NotFoundError for an unknown candidate without calling the AI", async () => {
+    const summarizer = summarizerReturning(okResult);
+
+    await expect(generateSummary(db, randomUUID(), { summarizer })).rejects.toBeInstanceOf(NotFoundError);
+    expect(summarizer).not.toHaveBeenCalled();
+  });
+});
