@@ -1,0 +1,13 @@
+# Store and check out text files with LF line endings on every OS,
+# regardless of each developer's core.autocrlf setting.
+* text=auto eol=lf
+
+# Never touch line endings in binary files.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.mp4 binary
