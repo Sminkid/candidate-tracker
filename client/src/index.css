@@ -1,0 +1,259 @@
+/* Design tokens from docs/design. Every colour, radius and size used below comes from here. */
+:root {
+  --font: "Inter", system-ui, sans-serif;
+  --accent: #2f4bda;
+  --text: #121826;
+  --text-secondary: #3a4350;
+  --muted: #5b6472;
+  --page: #f4f5f7;
+  --card: #ffffff;
+  --card-border: #e3e6eb;
+  --row-border: #eef0f3;
+  --field-border: #8a93a0;
+  --danger: #8f2424;
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --touch: 44px; /* minimum height of anything you can click or type in */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  background: var(--page);
+  color: var(--text);
+}
+
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Layout ---------- */
+
+.site-header {
+  background: var(--card);
+  border-bottom: 1px solid var(--card-border);
+}
+
+.site-header__inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 16px 32px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.brand {
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.page-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.page-heading h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+/* ---------- Buttons and links ---------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--touch);
+  padding: 0 18px;
+  border-radius: var(--radius-control);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button--primary {
+  background: var(--accent);
+  color: #ffffff;
+  border: 1px solid var(--accent);
+}
+
+.button--secondary {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--field-border);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ---------- Form fields ---------- */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.field select {
+  min-height: var(--touch);
+  min-width: 190px;
+  padding: 0 12px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
+  background: var(--card);
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--text);
+}
+
+/* ---------- Candidate table ---------- */
+
+.table-card {
+  overflow-x: auto;
+}
+
+.candidate-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.candidate-table th {
+  text-align: left;
+  padding: 12px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  border-bottom: 1px solid var(--card-border);
+}
+
+.candidate-table td {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--row-border);
+  color: var(--text-secondary);
+}
+
+.candidate-table__name {
+  color: var(--text);
+  font-weight: 500;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch);
+}
+
+/* The name link is 44px tall, so its cell needs less padding to keep the design's row height. */
+.candidate-table td.candidate-table__person {
+  padding-top: 4px;
+  padding-bottom: 12px;
+}
+
+.candidate-table__name:hover {
+  text-decoration: underline;
+}
+
+.candidate-table__email {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.table-message {
+  margin: 0;
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.table-message .button {
+  margin-top: 12px;
+}
+
+/* ---------- Stage pill: the label is always shown, colour is extra ---------- */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.pill--applied { background: #e9ecf0; color: #3a4350; }
+.pill--screening { background: #e4eafe; color: #1f3aa8; }
+.pill--interview { background: #ede5fb; color: #4a2c99; }
+.pill--offer { background: #ddf3e4; color: #17613a; }
+.pill--rejected { background: #fbe4e4; color: #8f2424; }
+
+/* Visible only to screen readers. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
