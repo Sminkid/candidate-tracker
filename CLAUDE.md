@@ -28,10 +28,10 @@ reasoning, tests and how AI tools are used. The author must be able to explain a
 | 3 | Server scaffold and database | Done (committed) |
 | 4 | Candidate service, notes and routes (test-first) | Done (committed) |
 | 5 | AI summarizer module (test-first) + summary endpoint | Done (committed) |
-| 6 | React client: add form, list with filters/sort, detail page with notes, stage change, summary | Done: list, add form, detail; 76 client tests; **awaiting author review/commit** |
-| 7 | Integration and seed data, incl. garbled and adversarial resumes | **Next** |
+| 6 | React client: add form, list with filters/sort, detail page with notes, stage change, summary | Done (committed): list, add form, detail; 76 client tests |
+| 7 | Integration and seed data, incl. garbled and adversarial resumes | Seed done (`npm run db:seed`, 13 tests); **awaiting author review/commit**. Integration check still to do |
 | 8 | Docs: README run steps + tests command, one-page write-up, AI usage log, learning log, screenshots/demo | To do |
-| 9 | Deploy to Vercel (two projects, one repo), or one-page cloud design if short on time | To do |
+| 9 | Deploy to Vercel (two projects, one repo), or one-page cloud design if short on time | **In progress** (done out of order, alongside task 7): server project deployed and working. Next: put the server URL in `client/vercel.json`, deploy the client project, run the live smoke test |
 
 Protect tasks 3–5 above all. If time runs short, cut from the end.
 
@@ -49,15 +49,28 @@ Protect tasks 3–5 above all. If time runs short, cut from the end.
 - Claude's choices (author may revisit): role filter options come from the data (an extra unfiltered list request), not a hardcoded list; list filters live in the URL query string; plain CSS with design tokens as CSS variables; client writes its own API types (dates are strings) instead of importing from server/.
 - Add form: no client copy of the server's Zod rules. Native `required`/`type=email`/`maxLength` catch obvious mistakes; the server's 400 message is split per field (`splitServerErrors`). Source options = design list + "Careers page" (used in the fixture). After save it opens `/candidates/:id`.
 
+### Task 7 decisions
+- Seed is worth having: a reviewer runs the app on **their own** Neon database (their own `DATABASE_URL`), which starts empty; the seed makes every feature visible and lets the README point at specific demo candidates.
+- Seed data lives in `src/seed/seedData.ts`, **separate from the test fixture**, so demo changes never move test data (Claude's choice; the cost is some duplication).
+- Inserts go **through the service layer** (create → move stage → notes → archive), after validating every entry with the API's own Zod schemas (`seedCandidateSchema` wraps `createCandidateBody` + `addNoteBody`). One invalid entry → nothing written.
+- **Skip by email** (case-insensitive): never updates or deletes, safe to re-run, keeps the author's manually entered candidate. Not a transaction (Neon HTTP); a half-finished run is resumed by re-running.
+- No summaries seeded and no summarizer passed in: Generate is clicked live. Demo AI cases: garbled (preflight: mostly symbols), too short (preflight), prompt injection (reaches the model).
+
+### Task 9 decisions (author)
+- **Proxy, not CORS** (Claude's recommendation, author agreed): `client/vercel.json` rewrites `/api/*` to the server project, so the browser only ever sees one origin, exactly like the Vite proxy in dev. No CORS code on the server, `VITE_API_URL` stays unset, preview deploys work. Cost: the server URL is hardcoded in `client/vercel.json`. CORS would only be needed if other websites had to call the API from a browser (out of scope). Neither option is access control: with no auth, the API is public either way.
+- **SPA fallback**: the same file rewrites every other path to `/index.html`, so refreshing `/candidates/:id` works. The `/api` rule must stay first.
+- **Two entry points, one builder**: `createProductionApp()` (`src/productionApp.ts`) reads env and wires Neon + Gemini; it **throws** if `DATABASE_URL` is missing. `src/server.ts` (local) turns that into `process.exit(1)` and calls `listen()`; `index.ts` (Vercel) default-exports the app and never listens.
+- Vercel server project: Root Directory `server`, env vars `DATABASE_URL`, `GEMINI_API_KEY`, `VERCEL_EXPERIMENTAL_BACKENDS=1`. `server/vercel.json` sets `buildCommand: npm run typecheck` (see Gotchas). Client project: Root Directory `client`, no env vars.
+
 ## Stack
-- Frontend: React 19 + Vite 8 + TypeScript 7 (`client/`), react-router 8 (declarative `<Routes>`), plain CSS. Dev: Vite proxies `/api` to `localhost:3000`; `VITE_API_URL` sets another API origin (task 9)
+- Frontend: React 19 + Vite 8 + TypeScript 7 (`client/`), react-router 8 (declarative `<Routes>`), plain CSS. Dev: Vite proxies `/api` to `localhost:3000`. Production: `client/vercel.json` proxies `/api` to the server project. `VITE_API_URL` (another API origin) exists but is unused; leave it unset
 - Backend: Node + Express 5 + TypeScript 7 (`server/`), run with `tsx` (no build step)
-- Database: Postgres (Neon) via Drizzle ORM 0.45, Neon HTTP driver (`@neondatabase/serverless`)
+- Database: Postgres (Neon) via Drizzle ORM 0.45, Neon HTTP driver (`@neondatabase/serverless`). The HTTP driver only works with Neon, not a plain local Postgres
 - Validation: Zod 4, for API input and for AI output
 - AI: Gemini via `@google/genai`, model `gemini-2.5-flash`, structured output (`responseSchema`) re-validated with Zod
 - Tests: Vitest 5 + Supertest. DB tests run on PGlite (in-memory Postgres). The Gemini client is always faked.
 - Node: `^22.12 || ^24 || >=26` (`engines` in `server/package.json`; `.nvmrc` = 24)
-- Deploy (optional): Vercel, two projects from one repo (`client/`, `server/` as root directories)
+- Deploy: Vercel, two projects from one repo (`client/`, `server/` as root directories). The server runs as one Vercel Function via Vercel's zero-config Express support; Vercel bundles it (no build step of our own)
 
 ## Layout
 ```
@@ -71,11 +84,15 @@ client/
     components/, pages/       Layout, StagePill, BackLink, SummaryCard, NotesPanel; CandidateListPage, AddCandidatePage, CandidateDetailPage, NotFoundPage
     index.css                 design tokens (CSS variables) + classes
   tests/                      helpers/ (mockFetch, makeCandidate, renderApp + LocationProbe), lib/, api/, pages/
+  vercel.json                 rewrites: /api/* → server project (proxy), everything else → index.html (SPA)
 server/
+  index.ts                    Vercel entry: default-exports createProductionApp() (no listen)
+  vercel.json                 buildCommand = typecheck (skips Vercel's TS-7-incompatible check)
   drizzle.config.ts           drizzle-kit config; loads .env itself
   src/
     app.ts                    createApp({ db, summarizer }): builds the Express app (no listen)
-    server.ts                 connects to Neon, starts on PORT; exits if DATABASE_URL missing
+    productionApp.ts          createProductionApp(): real Neon + Gemini from env; throws if DATABASE_URL missing
+    server.ts                 local entry: createProductionApp(), listen on PORT; exits if DATABASE_URL missing
     routes/
       candidates.ts           endpoints: validate → call one service function → JSON
       candidateSchemas.ts     Zod schemas for bodies, queries and :id
@@ -88,6 +105,7 @@ server/
       index.ts                Database type + createDb(url) for Neon
       candidateRepository.ts  the only place that builds queries
       migrations/             generated SQL (commit; never edit an applied one)
+    seed/                     seedData.ts (demo data + seedCandidateSchema), seed.ts (seedDatabase(db)), run.ts (CLI for `npm run db:seed`)
     ai/summarizer/
       index.ts                summarize(), createSummarizer(), SummaryResult/Summarizer types (public entry)
       preflight.ts            empty / too short / mostly non-text checks; truncation
@@ -99,7 +117,7 @@ server/
     helpers/fakes.ts          unusedSummarizer for tests that never request a summary
     helpers/factories.ts      candidateData(), insertCandidate(), insertNote()
     fixtures/candidates.ts    12 realistic candidates + seedCandidates(db)
-    db.test.ts, health.test.ts, services/, routes/, ai/summarizer/
+    db.test.ts, health.test.ts, services/, routes/, ai/summarizer/, seed/
 docs/                         write-up, logs, deployment design (task 8)
 ```
 Layer rule: routes know HTTP but not rules; services know rules but not HTTP or SQL; the db layer knows SQL but not rules; only the AI module knows Gemini. Dependencies (db, and later the summarizer) are passed in, never imported as globals, so tests can substitute PGlite and a fake model.
@@ -151,7 +169,7 @@ Deliberate exception: `tests/helpers/testDb.ts` imports Drizzle/PGlite (test set
 - Test data: use `seedCandidates(db)` (realistic fixture) for rules across many records and assert **properties** ("every result has stage X", "each pair is in order"), not hardcoded counts. Use factories (`insertCandidate(db, { ...overrides })`) for exact, controlled cases. Fixture guard tests keep the fixture covering every stage, archived + active, repeated roles, distinct createdAt.
 - Assert exact reasons, not just "it threw": Postgres codes `23502` NOT NULL, `23503` FK, `23514` CHECK; `NotFoundError` for missing rows.
 - Client commands (from `client/`): `npm run dev`, `npm test`, `npm run typecheck`, `npm run build`, `npm run lint`. Run the server too for real data.
-- Commands (from `server/`): `npm test`, `npm run test:watch`, `npm run typecheck`, `npm run dev`, `npm run db:generate`, `npm run db:migrate`, `npm run db:studio` (Drizzle Studio on the **live** DB: view only; edits bypass Zod and the append-only notes rule).
+- Commands (from `server/`): `npm test`, `npm run test:watch`, `npm run typecheck`, `npm run dev`, `npm run db:generate`, `npm run db:migrate`, `npm run db:seed` (adds demo candidates to the **live** DB; skips existing emails, never changes rows), `npm run db:studio` (Drizzle Studio on the **live** DB: view only; edits bypass Zod and the append-only notes rule).
 - Root commands (from repo root, after `npm ci` there): `npm run dev` runs server + client together (`concurrently`, labelled output, Ctrl+C stops both); `npm test` runs both suites. The root `package.json` holds only these helpers; client/ and server/ stay separate npm projects (no workspaces), so each keeps its own lockfile for its Vercel project.
 
 ## Conventions
@@ -172,6 +190,12 @@ Deliberate exception: `tests/helpers/testDb.ts` imports Drizzle/PGlite (test set
 - Rows inserted back-to-back in a test can share a `createdAt` (PGlite), and the tiebreak is a random UUID. Don't assert positions among such rows; give them distinct `createdAt` via factories, or match by value.
 - Client tests need Node ≥ 22: on Node 20, undici's zstd decompress crashes the Vitest workers. Run `nvm use` first.
 - `npm audit` reports moderate issues from an old esbuild inside drizzle-kit (dev only, not exploitable here); the suggested `--force` fix downgrades drizzle-kit — do not run it.
+- **Vercel + TypeScript 7 (three problems, found in order):**
+  1. Vercel's default Node build compiles with a temporary `tsconfig.json` in `/tmp` that `extends` ours. `types: ["node"]` is then looked up from `/tmp` → `TS2688 Cannot find type definition file for 'node'`. Fix: `"typeRoots": ["./node_modules/@types"]` in `server/tsconfig.json` (relative paths resolve from the file that declares them).
+  2. That default build keeps extensionless relative imports (`./src/productionApp`), which Node's ESM loader rejects (`ERR_MODULE_NOT_FOUND`; reproduced locally). Fix: env var `VERCEL_EXPERIMENTAL_BACKENDS=1` on the server project, which bundles with rolldown and resolves them.
+  3. The experimental build then type-checks through TypeScript's JavaScript API (`ts.sys`), which TypeScript 7 (native) no longer has → `Cannot read properties of undefined (reading 'readFile')`. Fix: `server/vercel.json` `buildCommand: "npm run typecheck"`. Any Build Command makes Vercel skip its own check; ours emits no `dist/`/`build/`/`output/`, so Vercel still bundles `index.ts` itself, and a type error still fails the deploy.
+- Vercel picks the first matching entry file (`Multiple entrypoints found: index.ts, src/app.ts. Using index.ts`). `src/app.ts` must not be the only match: it exports `createApp` by name, not an app.
+- `/health` is not under `/api`, so it is not proxied: check it on the server project's own domain.
 
 ## AI usage log (running list; genuine moments only)
 1. Claude's `tsconfig.json` had no `types` field; on TypeScript 7 `process` was not found. Fixed with `"types": ["node"]`. Lesson: check the installed tool version, not remembered defaults.
@@ -196,3 +220,5 @@ Deliberate exception: `tests/helpers/testDb.ts` imports Drizzle/PGlite (test set
 20. Author asked Claude to review decision 18. Claude pointed out the "15" came from E.164, which counts digits, while the rule counted `+()-` too, and that stripping spaces hurt readability. Author switched to "store as typed, at most 15 digits, 30 characters overall", which removed the data migration.
 21. Break-tests are now checked to have applied before reading the result: two of Claude's `sed` sabotages either did not match or hit every `.trim()` in the file; both redone by hand.
 22. Wiring up the root `npm test` exposed a flaky test of Claude's from task 4 (append-only notes, ~1 in 3 runs): two notes created in the same millisecond tie on `createdAt`, the random-UUID tiebreak then decides order, so `notes[0]` was sometimes the second note. Fixed the test to find the note by value (`toContainEqual`), since order is tested elsewhere; 10/10 green, and a sabotage that rewrites earlier notes still fails it.
+23. While discussing the seed, Claude said a reviewer could use "their own Neon (or local Postgres)" database. Claude then caught that this is wrong: the Neon HTTP driver only talks to Neon. The README said the same ("any Postgres connection string works"); both corrected.
+24. First Vercel build failed with `TS2688`. Claude's first guess (Vercel skipped devDependencies, so `@types/node` was missing) was wrong: the 194 installed packages match the lockfile's full Linux install, dev included. The real cause was found by reading Vercel's builder source (temporary `tsconfig` in `/tmp`) and reproducing the error locally before changing anything.

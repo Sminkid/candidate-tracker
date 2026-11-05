@@ -55,7 +55,7 @@ function isJsonParseError(err: unknown): boolean {
 // Never log resume text. Drizzle's error message includes the query parameters
 // (which can contain a whole resume), so for wrapped database errors we log only
 // the SQL text (values appear as $1, $2...) and the underlying Postgres code and message.
-function describeErrorSafely(err: unknown): string {
+export function describeErrorSafely(err: unknown): string {
   if (!(err instanceof Error)) return "Non-error value thrown";
   const cause = err.cause;
   if (cause instanceof Error) {
