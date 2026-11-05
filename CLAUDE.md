@@ -29,9 +29,9 @@ reasoning, tests and how AI tools are used. The author must be able to explain a
 | 4 | Candidate service, notes and routes (test-first) | Done (committed) |
 | 5 | AI summarizer module (test-first) + summary endpoint | Done (committed) |
 | 6 | React client: add form, list with filters/sort, detail page with notes, stage change, summary | Done (committed): list, add form, detail; 76 client tests |
-| 7 | Integration and seed data, incl. garbled and adversarial resumes | Seed done (`npm run db:seed`, 13 tests); **awaiting author review/commit**. Integration check still to do |
-| 8 | Docs: README run steps + tests command, one-page write-up, AI usage log, learning log, screenshots/demo | To do |
-| 9 | Deploy to Vercel (two projects, one repo), or one-page cloud design if short on time | **In progress** (done out of order, alongside task 7): server project deployed and working. Next: put the server URL in `client/vercel.json`, deploy the client project, run the live smoke test |
+| 7 | Integration and seed data, incl. garbled and adversarial resumes | Seed done (committed): `npm run db:seed`, 10 demo candidates, 13 tests. **Integration check still to do** (whole app on real data, incl. the 3 demo AI cases) |
+| 8 | Docs: README run steps + tests command, one-page write-up, AI usage log, learning log, screenshots/demo | **Partly done**: README drafted (getting started incl. root `npm ci` + `npm run dev`, tests, deployment + TS 7 workarounds, architecture, input rules, AI feature, demo data, limitations). To do: `docs/` folder (doesn't exist yet), one-page write-up, AI usage log (copy from below), learning log, screenshots/demo |
+| 9 | Deploy to Vercel (two projects, one repo), or one-page cloud design if short on time | **Done** (out of order, alongside task 7): server project at `https://candidate-tracker-pfqj.vercel.app` (`/health` and `/api/candidates` returned 200 on 2026-11-05); client project deployed and confirmed working by the author (2026-11-05); `client/vercel.json` points at the server |
 
 Protect tasks 3–5 above all. If time runs short, cut from the end.
 
@@ -54,10 +54,11 @@ Protect tasks 3–5 above all. If time runs short, cut from the end.
 - Seed data lives in `src/seed/seedData.ts`, **separate from the test fixture**, so demo changes never move test data (Claude's choice; the cost is some duplication).
 - Inserts go **through the service layer** (create → move stage → notes → archive), after validating every entry with the API's own Zod schemas (`seedCandidateSchema` wraps `createCandidateBody` + `addNoteBody`). One invalid entry → nothing written.
 - **Skip by email** (case-insensitive): never updates or deletes, safe to re-run, keeps the author's manually entered candidate. Not a transaction (Neon HTTP); a half-finished run is resumed by re-running.
+- 10 demo candidates. Failures are logged with `describeErrorSafely` (exported from `routes/http.ts` for this), never raw `err.message`.
 - No summaries seeded and no summarizer passed in: Generate is clicked live. Demo AI cases: garbled (preflight: mostly symbols), too short (preflight), prompt injection (reaches the model).
 
 ### Task 9 decisions (author)
-- **Proxy, not CORS** (Claude's recommendation, author agreed): `client/vercel.json` rewrites `/api/*` to the server project, so the browser only ever sees one origin, exactly like the Vite proxy in dev. No CORS code on the server, `VITE_API_URL` stays unset, preview deploys work. Cost: the server URL is hardcoded in `client/vercel.json`. CORS would only be needed if other websites had to call the API from a browser (out of scope). Neither option is access control: with no auth, the API is public either way.
+- **Proxy, not CORS** (Claude's recommendation, author agreed): `client/vercel.json` rewrites `/api/*` to the server project (`https://candidate-tracker-pfqj.vercel.app`), so the browser only ever sees one origin, exactly like the Vite proxy in dev. No CORS code on the server, `VITE_API_URL` stays unset, preview deploys work. Cost: the server URL is hardcoded in `client/vercel.json`. CORS would only be needed if other websites had to call the API from a browser (out of scope). Neither option is access control: with no auth, the API is public either way.
 - **SPA fallback**: the same file rewrites every other path to `/index.html`, so refreshing `/candidates/:id` works. The `/api` rule must stay first.
 - **Two entry points, one builder**: `createProductionApp()` (`src/productionApp.ts`) reads env and wires Neon + Gemini; it **throws** if `DATABASE_URL` is missing. `src/server.ts` (local) turns that into `process.exit(1)` and calls `listen()`; `index.ts` (Vercel) default-exports the app and never listens.
 - Vercel server project: Root Directory `server`, env vars `DATABASE_URL`, `GEMINI_API_KEY`, `VERCEL_EXPERIMENTAL_BACKENDS=1`. `server/vercel.json` sets `buildCommand: npm run typecheck` (see Gotchas). Client project: Root Directory `client`, no env vars.
@@ -118,7 +119,7 @@ server/
     helpers/factories.ts      candidateData(), insertCandidate(), insertNote()
     fixtures/candidates.ts    12 realistic candidates + seedCandidates(db)
     db.test.ts, health.test.ts, services/, routes/, ai/summarizer/, seed/
-docs/                         write-up, logs, deployment design (task 8)
+docs/                         (not created yet) write-up, logs, deployment design (task 8)
 ```
 Layer rule: routes know HTTP but not rules; services know rules but not HTTP or SQL; the db layer knows SQL but not rules; only the AI module knows Gemini. Dependencies (db, and later the summarizer) are passed in, never imported as globals, so tests can substitute PGlite and a fake model.
 Deliberate exception: `tests/helpers/testDb.ts` imports Drizzle/PGlite (test setup, not app code).
@@ -156,6 +157,7 @@ Deliberate exception: `tests/helpers/testDb.ts` imports Drizzle/PGlite (test set
 - Never log resume text. Use a request timeout. The app must keep working when the AI call fails.
 
 ## Testing
+- Current counts (2026-11-05, all green): server 175 tests in 9 files, client 76 tests in 7 files.
 - Test behaviour that matters; do not chase a coverage number.
 - Services and the AI module are developed test-first (red, green, refactor).
 - Must cover: stage transitions, append-only notes, archive/filter/sort, summarizer preflight, schema validation, an injection fixture (faked model returns hostile output), and the AI failure path.

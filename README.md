@@ -25,12 +25,11 @@ git clone https://github.com/Sminkid/candidate-tracker.git
 cd candidate-tracker
 nvm use            # optional, if you use nvm
 
-cd server
-npm ci
-cd ../client
-npm ci
-cd ..
+npm ci             # root: only the helper that runs server + client together
+npm ci --prefix server
+npm ci --prefix client
 ```
+`client/` and `server/` are separate npm projects, each with its own lockfile, so each needs its own install.
 
 ### 2. Configure the server
 Copy the example env file and fill in both values:
@@ -48,22 +47,17 @@ GEMINI_API_KEY=...                 # leave empty to run without AI summaries
 cd server
 npm run db:migrate
 npm run db:seed    # optional: 10 demo candidates (see "Demo data" below)
+cd ..
 ```
 The seed only adds rows. It skips any candidate whose email is already in the database, so it is safe to run twice or on a database with real data.
 
-### 4. Run the app (two terminals)
-**Terminal 1: the API** (port 3000)
+### 4. Run the app
+From the repo root:
 ```sh
-cd server
 npm run dev
 ```
-You should see `Server listening on http://localhost:3000`. If you left `GEMINI_API_KEY` empty, you will also see a warning that AI summaries are disabled.
+This starts the API (port 3000) and the web app (port 5173) together, with each line of output labelled `[server]` or `[client]`. Ctrl+C stops both. You should see `Server listening on http://localhost:3000`. If you left `GEMINI_API_KEY` empty, you will also see a warning that AI summaries are disabled.
 
-**Terminal 2: the web app** (port 5173)
-```sh
-cd client
-npm run dev
-```
 Open **http://localhost:5173**. In development, Vite forwards every `/api` request to the server on port 3000, so no CORS setup is needed.
 
 Without the seed, the database starts empty. Use **Add candidate** to create one.
@@ -71,6 +65,10 @@ Without the seed, the database starts empty. Use **Add candidate** to create one
 ## Running the tests
 No database, API key or network is needed. Database tests run on PGlite (in-memory Postgres, built from the same migration files), and the Gemini client is always faked.
 
+```sh
+npm test            # from the repo root: runs both suites below
+```
+Or run each project on its own, with its typecheck and lint:
 ```sh
 cd server
 npm test            # 175 tests: database, services, routes, AI summarizer, seed
@@ -109,7 +107,7 @@ flowchart LR
 | `VERCEL_EXPERIMENTAL_BACKENDS=1` | Vercel's newer build bundles the server and resolves imports without file extensions (`./db`), which plain Node rejects |
 | `"buildCommand": "npm run typecheck"` in `server/vercel.json` | That newer build type-checks through TypeScript's JavaScript API, which TypeScript 7 removed. A build command replaces Vercel's check with ours, so type errors still fail the deploy |
 
-## Viewing drizzle studio
+## Viewing drizzle studio (NEEDS DATABASE_URL TO WORK)
 ```sh
 npx drizzle-kit studio
 ```
