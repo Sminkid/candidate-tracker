@@ -238,7 +238,9 @@ describe("addNote", () => {
 
     const { notes } = await getCandidate(db, candidate.id);
     expect(notes).toHaveLength(2);
-    expect(notes[0]).toEqual(first);
+    // Look the note up by value, not position: both notes can share a createdAt
+    // (same millisecond), and then their order is decided by random ids.
+    expect(notes).toContainEqual(first);
   });
 
   it("throws NotFoundError for an unknown candidate instead of a database error", async () => {

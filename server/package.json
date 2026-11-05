@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.15",

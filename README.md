@@ -79,6 +79,10 @@ npm test            # 76 tests: logic and React components (fetch is faked)
 npm run typecheck
 npm run lint
 ```
+## Viewing drizzle studio
+```sh
+npx drizzle-kit studio
+```
 
 ## Tech stack and why
 

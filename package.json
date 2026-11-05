@@ -1,0 +1,12 @@
+{
+  "name": "candidate-tracker",
+  "private": true,
+  "description": "Root helper scripts only. client/ and server/ are separate npm projects with their own dependencies.",
+  "scripts": {
+    "dev": "concurrently --names server,client --prefix-colors blue,green --kill-others-on-fail \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "test": "npm --prefix server test && npm --prefix client test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.5"
+  }
+}

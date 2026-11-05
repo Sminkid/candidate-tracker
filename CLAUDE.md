@@ -151,7 +151,8 @@ Deliberate exception: `tests/helpers/testDb.ts` imports Drizzle/PGlite (test set
 - Test data: use `seedCandidates(db)` (realistic fixture) for rules across many records and assert **properties** ("every result has stage X", "each pair is in order"), not hardcoded counts. Use factories (`insertCandidate(db, { ...overrides })`) for exact, controlled cases. Fixture guard tests keep the fixture covering every stage, archived + active, repeated roles, distinct createdAt.
 - Assert exact reasons, not just "it threw": Postgres codes `23502` NOT NULL, `23503` FK, `23514` CHECK; `NotFoundError` for missing rows.
 - Client commands (from `client/`): `npm run dev`, `npm test`, `npm run typecheck`, `npm run build`, `npm run lint`. Run the server too for real data.
-- Commands (from `server/`): `npm test`, `npm run test:watch`, `npm run typecheck`, `npm run dev`, `npm run db:generate`, `npm run db:migrate`.
+- Commands (from `server/`): `npm test`, `npm run test:watch`, `npm run typecheck`, `npm run dev`, `npm run db:generate`, `npm run db:migrate`, `npm run db:studio` (Drizzle Studio on the **live** DB: view only; edits bypass Zod and the append-only notes rule).
+- Root commands (from repo root, after `npm ci` there): `npm run dev` runs server + client together (`concurrently`, labelled output, Ctrl+C stops both); `npm test` runs both suites. The root `package.json` holds only these helpers; client/ and server/ stay separate npm projects (no workspaces), so each keeps its own lockfile for its Vercel project.
 
 ## Conventions
 - TypeScript strict mode. Prefer plain, readable code over clever code.
@@ -168,6 +169,8 @@ Deliberate exception: `tests/helpers/testDb.ts` imports Drizzle/PGlite (test set
 - `@google/genai` `Schema` takes `maxItems` as a **string**. Its `responseSchema` is a request, not a guarantee; Zod is the gate. A test keeps its field names in step with the Zod schema.
 - create-vite's `tsconfig.app.json` had no `"strict": true`; added explicitly to both client tsconfigs.
 - `useApiData` must not set "loading" inside an effect (oxlint `set-state-in-effect`): results are stored with their request key and "loading" is derived. The `aborted` guard is still needed, or a late stale answer overwrites the current one (the race test proves it).
+- Rows inserted back-to-back in a test can share a `createdAt` (PGlite), and the tiebreak is a random UUID. Don't assert positions among such rows; give them distinct `createdAt` via factories, or match by value.
+- Client tests need Node ≥ 22: on Node 20, undici's zstd decompress crashes the Vitest workers. Run `nvm use` first.
 - `npm audit` reports moderate issues from an old esbuild inside drizzle-kit (dev only, not exploitable here); the suggested `--force` fix downgrades drizzle-kit — do not run it.
 
 ## AI usage log (running list; genuine moments only)
@@ -192,3 +195,4 @@ Deliberate exception: `tests/helpers/testDb.ts` imports Drizzle/PGlite (test set
 19. Claude's first "break it on purpose" script for the phone rule silently did nothing (its regex did not match, so the code was unchanged and the tests still passed). Spotted from the printed code and redone by hand: putting `.max()` before `.overwrite()` fails 2 tests.
 20. Author asked Claude to review decision 18. Claude pointed out the "15" came from E.164, which counts digits, while the rule counted `+()-` too, and that stripping spaces hurt readability. Author switched to "store as typed, at most 15 digits, 30 characters overall", which removed the data migration.
 21. Break-tests are now checked to have applied before reading the result: two of Claude's `sed` sabotages either did not match or hit every `.trim()` in the file; both redone by hand.
+22. Wiring up the root `npm test` exposed a flaky test of Claude's from task 4 (append-only notes, ~1 in 3 runs): two notes created in the same millisecond tie on `createdAt`, the random-UUID tiebreak then decides order, so `notes[0]` was sometimes the second note. Fixed the test to find the note by value (`toContainEqual`), since order is tested elsewhere; 10/10 green, and a sabotage that rewrites earlier notes still fails it.
