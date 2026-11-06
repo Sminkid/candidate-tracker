@@ -197,8 +197,7 @@ server/
     db/                   Drizzle schema, connection, repository, migrations
     ai/summarizer/        AI module
     seed/                 demo data and `npm run db:seed`
-  tests/                  database, service, route, summarizer and seed tests
-docs/  
+  tests/                  database, service, route, summarizer and seed tests 
 ```
 
 ## Limitations and next steps
