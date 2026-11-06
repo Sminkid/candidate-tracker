@@ -178,24 +178,27 @@ The first two are checked in the automated tests. The third is a live check agai
 
 ## Project structure
 ```
-client/src/
-  api/                  API types and one function per endpoint
-  lib/                  data loading, URL filters, form errors, formatting
-  components/, pages/   list, add form, detail page (notes, summary card)
-client/tests/           logic and component tests
-client/vercel.json      Vercel rewrites: API proxy + SPA fallback
-server/index.ts         Vercel entry point
-server/vercel.json      Vercel build command (type check)
-server/src/
-  app.ts                builds the Express app
-  productionApp.ts      wires in the real database and Gemini from env vars
-  server.ts             starts the server locally
-  routes/               HTTP and Zod validation
-  services/             business rules
-  db/                   Drizzle schema, connection, repository, migrations
-  ai/summarizer/        AI module
-  seed/                 demo data and `npm run db:seed`
-server/tests/           database, service, route, summarizer and seed tests
+client/
+  src/
+    api/                  API types and one function per endpoint
+    lib/                  data loading, URL filters, form errors, formatting
+    components/, pages/   list, add form, detail page (notes, summary card)
+  tests/                  logic and component tests
+  vercel.json             Vercel rewrites: API proxy + SPA fallback
+server/
+  index.ts                Vercel entry point
+  vercel.json             Vercel build command (type check)
+  src/
+    app.ts                builds the Express app
+    productionApp.ts      wires in the real database and Gemini from env vars
+    server.ts             starts the server locally
+    routes/               HTTP and Zod validation
+    services/             business rules
+    db/                   Drizzle schema, connection, repository, migrations
+    ai/summarizer/        AI module
+    seed/                 demo data and `npm run db:seed`
+  tests/                  database, service, route, summarizer and seed tests
+docs/  
 ```
 
 ## Limitations and next steps
