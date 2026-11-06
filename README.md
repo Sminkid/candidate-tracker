@@ -196,7 +196,6 @@ server/src/
   ai/summarizer/        AI module
   seed/                 demo data and `npm run db:seed`
 server/tests/           database, service, route, summarizer and seed tests
-docs/                   write-up, logs, deployment design (to come)
 ```
 
 ## Limitations and next steps
